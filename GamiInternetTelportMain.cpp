@@ -38,10 +38,11 @@ void InitGamiInternetTelport(int argc, char *argv[]){
     }
 }
 
-
+#ifndef GAMI_CONTROLLER_NO_MAIN
 int main(int argc, char *argv[])
 {
     QApplication a(argc, argv);
     InitGamiInternetTelport(argc, argv);
     return a.exec();
 }
+#endif
