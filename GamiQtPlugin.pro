@@ -17,7 +17,7 @@ DEFINES += QT_DEPRECATED_WARNINGS
 SOURCES += \
         GamiInternetTelport.cpp \
         GamiInternetTelportDisplay.cpp \
-        main.cpp
+        GamiInternetTelportMain.cpp
 INCLUDEPATH += $$PWD/include
 INCLUDEPATH += $$PWD/include/nanomsg
 

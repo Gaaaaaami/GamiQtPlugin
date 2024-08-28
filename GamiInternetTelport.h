@@ -1,6 +1,6 @@
 #ifndef GAMIINTERNETTELPORT_H
 #define GAMIINTERNETTELPORT_H
-
+#include <atomic>
 #include <QImage>
 #include <QObject>
 #include <QTimer>
@@ -10,6 +10,7 @@
 #include <QEvent>
 #include <QThread>
 #include <QMutex>
+#include <QFile>
 #include <QMutexLocker>
 class GamiInternetTelportThread:public QThread{
     Q_OBJECT
@@ -56,22 +57,30 @@ protected slots:
     virtual void defaultTimeout();
     virtual void OnKey(stKey *e);
 private:
-    int                     _canvas_sockfd;
-    int                     _key_sockfd;
+    int                          _canvas_sockfd;
+    int                          _key_sockfd;
 private:
-    QMutex                  _key_mutex;
+    QMutex                       _key_mutex;
 private:
-    QImage                  _canvas;
-    QTimer                  _default_timer;
+    QImage                       _canvas;
+    QTimer                       _default_timer;
 private:
-    bool                    _is_sender;
+    bool                         _is_sender;
 private:
-    QQueue<stKey>           _key_queue_sender_container;
+    QQueue<stKey>                _key_queue_sender_container;
 private:
     GamiInternetTelportThread   *_thread;
+    std::atomic<bool>            _key_thread_running;
 private:
     unsigned char               _key_seq;
     unsigned char               _last_receive_seq;
+private:
+#ifndef WIN32
+    QFile                       _file;
+    int                         _screen_w;
+    int                         _screen_h;
+    int                         _screen_size
+#endif
 };
 
 #endif // GAMIINTERNETTELPORT_H

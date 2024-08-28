@@ -13,6 +13,20 @@
 #include <bus.h>
 #include <nn.h>
 
+
+#ifndef WIN32
+#include <assert.h>
+#include <sys/types.h>
+#include <sys/socket.h>
+#include <sys/select.h>
+#include <sys/ioctl.h>
+#include <sys/mman.h>
+#include <linux/fb.h>
+#include <netinet/in.h>
+#include <arpa/inet.h>
+#include <unistd.h>
+#endif
+
 bool saveImageToBuffer(const QImage &image, QBuffer &buffer, int quality = -1);
 bool saveImageToBuffer(const QImage &image, QBuffer &buffer, int quality) {
     buffer.open(QIODevice::WriteOnly);
@@ -30,8 +44,33 @@ GamiInternetTelport::GamiInternetTelport():_canvas_sockfd(-1),_key_seq( 1),_last
     connect(this, SIGNAL(signal_frame_key(stKey * )), this ,SLOT(OnKey(stKey * )), Qt::QueuedConnection);
     connect(_thread, SIGNAL(signal_thread_run()), this ,SLOT(thread()),Qt::DirectConnection);
 
+
+#ifndef WIN32
+    _file.setFileName("/dev/fb0");
+    if(!_file.open(    QFile::ReadOnly)){
+        return;
+    }
+    struct fb_var_screeninfo vinfo;
+    if(ioctl(_file.handle(), FBIOGET_VSCREENINFO, &vinfo)){
+       _file.close();
+       return;
+    }
+
+    int w = vinfo.xres;
+    int h = vinfo.yres;
+    int screensize = w * h* vinfo.bits_per_pixel / 8;
+
+    _screen_size = screensize;
+    _screen_w = w;
+    _screen_h = h;
+#endif
+
+
+
 }
-GamiInternetTelport::~GamiInternetTelport(){}
+GamiInternetTelport::~GamiInternetTelport(){
+    _key_thread_running.store(false);
+}
 void GamiInternetTelport::sendKey(stKey e){
     e.seq = _key_seq;
     nn_send(_key_sockfd, &e , sizeof(e), 0);
@@ -84,7 +123,6 @@ void GamiInternetTelport::exec(){
        sendBuffer(_canvas);
     }
 
-
     struct nn_pollfd fd[1] = { 0};
     fd[0].fd =  _canvas_sockfd;
     fd[0].events = NN_POLLIN;
@@ -108,15 +146,37 @@ void GamiInternetTelport::exec(){
     }
 }
 void GamiInternetTelport::getScreen(QImage &canvas){
+#ifdef WIN32
     QScreen *screen = QApplication::primaryScreen();
     if (screen)
         canvas=  screen->grabWindow(0).toImage();
+#else
 
+    image = QImage(_screen_w,_screen_h,QImage::Format_RGB32);
+    image.fill(Qt::red);
+
+    QPainter painter(&image);
+    painter.setPen(QPen(Qt::white, 2));
+    QFont font = painter.font();
+    font.setPixelSize(30);
+    painter.drawText(0,0,_screen_w, _screen_h,Qt::AlignCenter,"HELLO!");
+    return;
+    qDebug() << "framebuffer size | "<< "w = " << _screen_w << ", h = " <<  _screen_h<<", size = " << _screen_size;
+
+    static unsigned char *fb_ptr = (unsigned char *)mmap(NULL, _screen_size, PROT_READ, MAP_SHARED, _file.handle(),0 );
+
+    if(!fb_ptr){
+        qDebug()<<"fp_ptr is nullptr";
+        image = QImage(_screen_w, _screen_h,      QImage::Format_RGB32);
+        return;
+    }
+    image = QImage(fb_ptr, _screen_w, _screen_h,      QImage::Format_RGB32);
+#endif
 }
 
 void GamiInternetTelport::thread(){
-    qDebug() << "thread go !";
-    while(true){
+    _key_thread_running.store(true);
+    while(_key_thread_running.load()){
         QMutexLocker m(&_key_mutex);
         for(int i = 0; i < 1; i++){
             if(!_key_queue_sender_container.isEmpty()){
@@ -127,10 +187,6 @@ void GamiInternetTelport::thread(){
             }else
                 break;
         }
-
-
-
-
 
         struct nn_pollfd fd[1] = { 0};
         fd[0].fd =  _key_sockfd;
@@ -168,6 +224,7 @@ void GamiInternetTelport::thread(){
 
     }
 
+    nn_close(_key_sockfd);
 }
 void GamiInternetTelport::defaultTimeout(){
     exec();
@@ -208,6 +265,7 @@ void GamiInternetTelport::OnKey(stKey* e){
        if(obj)
           QApplication::sendEvent(obj, &keye);
 
+       qDebug() << obj << Qt::Key(keye.key());
 
        delete e;
 
@@ -217,7 +275,6 @@ void GamiInternetTelport::OnKey(stKey* e){
 GamiInternetTelportThread::GamiInternetTelportThread(){}
 GamiInternetTelportThread::~GamiInternetTelportThread(){}
 
-void GamiInternetTelportThread::run()
-{
+void GamiInternetTelportThread::run(){
     emit signal_thread_run();
 }
