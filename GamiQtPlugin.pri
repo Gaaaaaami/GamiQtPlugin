@@ -14,3 +14,4 @@ HEADERS += \
 
 FORMS += \
     GamiInternetTelportDisplay.ui
+DEFINES += GAMI_CONTROLLER_NO_MAIN
